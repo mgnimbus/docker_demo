@@ -130,3 +130,150 @@ $ terraform plan -var-file=west.tfvars
 
 //for central
 $ terraform plan -var-file=cent.tfvars
+
+//If you want to hide the imp values then you add the fucntio  
+sensitive=true
+
+variable "external" {
+  type = number
+  default = "70000"
+  sensitive = true
+  
+  validation {
+    condition = var.external <= 65535 && var.external >= 0
+    error_message = "The external port must be between 0 - 65535
+  }
+}
+
+provisioners
+they will excute resources on your behalf like ansible does
+
+ther are file,local-exec,remote-exec
+
+resource "null_resource" "docker_volume" {
+  provisioner "local-exec" {
+    command = "mkdir dockervol/ || true && chown -R 1000:1000 dockervol/"
+  }
+}
+
+they are a bit tricky to use just use them for last resort 
+most production use tools like ansible and shit
+
+Like they are not idemoptent like other resource you need to take a precaution while using them
+
+like here in case dockervil is present already,its show a error it's already present
+need to make them idempotent by using the commande '"mkdir dockervol/ || true && chown -R 1000:1000 dockervol/"
+If the directory is present 
+
+
+//now lets say you need to provision containers based on the ports available
+variable "external" {
+  type    =  list(number)
+  default = [1880, 1881, 1882]
+  }
+  
+  resource "docker_container" "nodered" {
+  count = var.no_of_container
+  name  = "nodered-container-${random_string.random[count.index].id}"
+  image = docker_image.nodered_image.image_id
+  ports {
+    internal = var.internal
+    external = var.external[count.index]
+    protocol = "tcp"
+  }
+  }
+  
+--now the ports are fixed and the count must be depend on the number of ext ports
+so lets fix no_of_container
+
+variable "no_of_containes" {
+  type = number
+  default = length(var.external)
+}
+
+NO we cant call another function in the variable.
+FOr that we need to use local
+
+locals {
+  no_of_containers = length(var.external)
+}
+
+count = local.no_of_container
+
+NOw to use validation for a list we need to make use of another function called max and min 
+with which we find the max value amoung the list and minimum
+
+max(1,2,3)
+3
+
+max([1, 2, 3])
+//Its wont work as its looking for the list
+
+max([1, 2 ,3]...)
+... is the expand/spread opertor is to break the function and test individuvally
+
+
+In real use in variable
+  validation {
+    condition     = max(var.external...) <= 65535 && min(var.external...) >= 0
+    error_message = "The external port must be between 0 - 65535."
+  }
+  
+  
+  variable "external" {
+  type    =  list(number)
+  default = [1880, 1881]
+
+  validation {
+    condition     = max(var.external...) <= 65535 && min(var.external...) >= 0
+    error_message = "The external port must be between 0 - 65535."
+  }
+}
+
+condition     = max(var.external...) doesn't need square[] as its already in the list
+
+
+--Path refrences
+> path.root
+"."
+> path.cwd
+"/home/ubuntu/environment/docker_demo"
+> path.module
+"."
+
+  volumes {
+    container_path ="/data"
+    host_path = "${path.cwd}/dockervol/"
+  }
+  
+  --string Interpolatin ${}
+  
+  
+  --lookup
+  
+  lookup(map, key, default)
+  
+  lookup({dev="image1", prod="image2"}, dev)
+  image1
+  
+  lookup({dev="image1", prod="image2"}, prod)
+  image2
+  
+  resource "docker_image" "nodered_image" {
+  name = lookup(var.docket_image, "${var.env}")
+}
+
+variable "env" {
+  type        = string
+  description = "Env to deploy to"
+  default     = "dev"
+}
+
+variable "docket_image" {
+  type        = map(string)
+  description = "Image to use for provisioning"
+  default = {
+    dev  = "nodered/node-red:latest"
+    prod = "nodered/node-red:latest-minimal"
+  }
+}
